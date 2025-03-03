@@ -1,5 +1,8 @@
 # Next.js Tool Integrator
 
+[![npm version](https://badge.fury.io/js/nextjs-tool-integrator.svg)](https://badge.fury.io/js/nextjs-tool-integrator)
+[![](public/Integrator-Demo.gif)]()
+
 A CLI tool that bootstraps or integrates a full-stack Next.js application with an external tool based on a provided URL.
 
 ## Features
