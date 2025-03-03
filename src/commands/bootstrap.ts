@@ -52,12 +52,22 @@ function createNextApp(directory: string): void {
     // Use create-next-app to bootstrap a new Next.js app
     console.log(chalk.blue('Running create-next-app...'));
     
+    // First, check if the directory already contains Next.js files
+    const dirContents = fs.readdirSync(directory);
+    if (dirContents.some(file => 
+      ['package.json', 'next.config.js', 'next.config.mjs', 'next.config.ts'].includes(file))) {
+      console.log(chalk.yellow('Directory already contains Next.js files. Skipping create-next-app...'));
+      return; // Skip create-next-app if the directory already has Next.js files
+    }
+    
     // Use npx to run create-next-app with the latest version
+    // Use a simpler command to avoid issues with quotes and special characters
     execSync(
-      'npx create-next-app@latest . --ts --eslint --app --src-dir --import-alias "@/*" --tailwind --use-npm', 
+      'npx create-next-app@latest .', 
       { 
         cwd: directory, 
-        stdio: 'inherit' 
+        stdio: 'inherit',
+        timeout: 300000 // 5 minutes timeout
       }
     );
     

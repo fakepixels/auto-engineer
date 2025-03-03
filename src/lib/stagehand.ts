@@ -7,7 +7,6 @@
 
 import { 
   StagehandAutomation, 
-  StagehandBrowser, 
   StagehandConfig, 
   ExtractedData, 
   ObservationResult,
@@ -18,7 +17,6 @@ import {
 // Re-export everything
 export {
   StagehandAutomation,
-  StagehandBrowser,
   StagehandConfig,
   ExtractedData,
   ObservationResult,
