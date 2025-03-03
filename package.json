@@ -1,0 +1,62 @@
+{
+  "name": "nextjs-tool-integrator",
+  "version": "1.0.0",
+  "description": "CLI tool to bootstrap or integrate Next.js applications with external tools",
+  "main": "dist/index.js",
+  "bin": {
+    "nextjs-integrator": "./bin/nextjs-integrator"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "prepare": "npm run build",
+    "postinstall": "chmod +x bin/nextjs-integrator",
+    "lint": "tsc --noEmit",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "nextjs",
+    "cli",
+    "integration",
+    "automation",
+    "stagehand",
+    "browser-automation",
+    "full-stack",
+    "scaffolding",
+    "tool-integration"
+  ],
+  "author": "Tina He <tinaxhe@gmail.com>",
+  "license": "ISC",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fakepixels/nextjs-tool-integrator.git"
+  },
+  "bugs": {
+    "url": "https://github.com/fakepixels/nextjs-tool-integrator/issues"
+  },
+  "homepage": "https://github.com/fakepixels/nextjs-tool-integrator#readme",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "files": [
+    "dist",
+    "bin",
+    "README.md",
+    "LICENSE"
+  ],
+  "dependencies": {
+    "@types/fs-extra": "^11.0.4",
+    "@types/inquirer": "^9.0.7",
+    "@types/node": "^22.13.8",
+    "axios": "^1.8.1",
+    "chalk": "^4.1.2",
+    "commander": "^13.1.0",
+    "fs-extra": "^11.3.0",
+    "inquirer": "^12.4.2",
+    "stagehand": "^1.0.1",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.2"
+  }
+}
