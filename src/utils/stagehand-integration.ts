@@ -1,7 +1,7 @@
 import chalk from 'chalk';
 
 // Import stagehand dynamically to avoid type errors
-let stagehand: any = {};
+let stagehand: typeof import('stagehand') | null = null;
 
 try {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -41,12 +41,23 @@ export interface ToolAnalysisResult {
   timestamp: string;
 }
 
+// Replace browser any type with a proper interface
+interface StagehandBrowser {
+  goto?: (url: string) => Promise<void>;
+  evaluate?: <T>(fn: () => T) => Promise<T>;
+  extract?: (instruction: string) => Promise<ExtractedData>;
+  observe?: (instruction: string) => Promise<ObservationResult>;
+  close?: () => Promise<void>;
+  exit?: () => Promise<void>;
+  quit?: () => Promise<void>;
+}
+
 /**
  * Class to handle browser automation with Stagehand
  */
 export class StagehandAutomation {
   private config: StagehandConfig;
-  protected browser: any = null;
+  protected browser: StagehandBrowser | null = null;
 
   /**
    * Creates a new StagehandAutomation instance
@@ -267,9 +278,9 @@ export class StagehandAutomation {
     
     try {
       if (typeof this.browser.evaluate === 'function') {
-        return await this.browser.evaluate(fn);
+        // Add type assertion for browser context
+        return await this.browser.evaluate<T>(fn);
       } else {
-        // Mock evaluation for testing
         console.log(chalk.yellow('Mock evaluation:'), fn.toString());
         return { mockData: 'This is mock data from evaluate' } as unknown as T;
       }
@@ -325,7 +336,7 @@ function extractCodeExamplesFromHtml(html: string): CodeExample[] {
   // Simple regex to find code blocks
   const codeBlockRegex = /<pre(?:\s+class="([^"]*)")?>(?:<code(?:\s+class="([^"]*)")?>)?([\s\S]*?)(?:<\/code>)?<\/pre>/gi;
   
-  let match;
+  let match: RegExpExecArray | null;
   while ((match = codeBlockRegex.exec(html)) !== null) {
     const preClass = match[1] || '';
     const codeClass = match[2] || '';
@@ -377,7 +388,7 @@ function detectDependenciesFromCode(codeExamples: CodeExample[]): string[] {
       const code = example.code;
       
       // Find import statements
-      let match;
+      let match: RegExpExecArray | null;
       while ((match = importRegex.exec(code)) !== null) {
         const packageName = extractPackageName(match[1]);
         if (packageName) {
@@ -462,9 +473,14 @@ export async function analyzeToolUrl(url: string, config: StagehandConfig = {}):
     }
     
     // Look for documentation links
-    let docLinks: any[] = [];
+    interface DocLink {
+      text: string | null;
+      href: string | null;
+    }
+
+    let docLinks: DocLink[] = [];
     if (pageStructure.links && Array.isArray(pageStructure.links)) {
-      docLinks = (pageStructure.links as any[]).filter(link => {
+      docLinks = (pageStructure.links as DocLink[]).filter(link => {
         const text = String(link.text || '').toLowerCase();
         const href = String(link.href || '');
         
