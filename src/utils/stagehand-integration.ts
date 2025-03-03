@@ -36,6 +36,8 @@ export interface ToolAnalysisResult {
   url: string;
   toolInfo: ExtractedData;
   pageStructure: ObservationResult;
+  codeExamples?: CodeExample[];
+  dependencies?: string[];
   timestamp: string;
 }
 
@@ -44,7 +46,7 @@ export interface ToolAnalysisResult {
  */
 export class StagehandAutomation {
   private config: StagehandConfig;
-  private browser: any = null;
+  protected browser: any = null;
 
   /**
    * Creates a new StagehandAutomation instance
@@ -254,6 +256,30 @@ export class StagehandAutomation {
   }
 
   /**
+   * Evaluates JavaScript code in the browser context
+   * @param fn The function to evaluate
+   * @returns The result of the evaluation
+   */
+  async evaluate<T>(fn: () => T): Promise<T> {
+    if (!this.browser) {
+      throw new Error('Browser not initialized. Call initialize() first.');
+    }
+    
+    try {
+      if (typeof this.browser.evaluate === 'function') {
+        return await this.browser.evaluate(fn);
+      } else {
+        // Mock evaluation for testing
+        console.log(chalk.yellow('Mock evaluation:'), fn.toString());
+        return { mockData: 'This is mock data from evaluate' } as unknown as T;
+      }
+    } catch (error) {
+      console.error(chalk.red('Failed to evaluate JavaScript:'), error);
+      throw new Error(`Evaluation failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /**
    * Closes the Stagehand browser
    */
   async close(): Promise<void> {
@@ -279,6 +305,126 @@ export class StagehandAutomation {
 }
 
 /**
+ * Type for code examples extracted from documentation
+ */
+export interface CodeExample {
+  language: string;
+  code: string;
+  description?: string;
+  filename?: string;
+}
+
+/**
+ * Extracts code examples from a page
+ * @param html The HTML content of the page
+ * @returns Array of code examples
+ */
+function extractCodeExamplesFromHtml(html: string): CodeExample[] {
+  const codeExamples: CodeExample[] = [];
+  
+  // Simple regex to find code blocks
+  const codeBlockRegex = /<pre(?:\s+class="([^"]*)")?>(?:<code(?:\s+class="([^"]*)")?>)?([\s\S]*?)(?:<\/code>)?<\/pre>/gi;
+  
+  let match;
+  while ((match = codeBlockRegex.exec(html)) !== null) {
+    const preClass = match[1] || '';
+    const codeClass = match[2] || '';
+    const code = match[3] || '';
+    
+    // Try to determine language from class
+    let language = 'javascript'; // Default to JavaScript
+    const classToCheck = codeClass || preClass;
+    
+    if (classToCheck) {
+      const langMatch = classToCheck.match(/language-(\w+)|lang-(\w+)|(\w+)-code/);
+      if (langMatch) {
+        language = langMatch[1] || langMatch[2] || langMatch[3] || language;
+      }
+    }
+    
+    // Clean up the code (remove HTML entities, etc.)
+    const cleanedCode = code
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&amp;/g, '&')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .trim();
+    
+    codeExamples.push({
+      language,
+      code: cleanedCode,
+    });
+  }
+  
+  return codeExamples;
+}
+
+/**
+ * Detects dependencies from code examples
+ * @param codeExamples Array of code examples
+ * @returns Array of detected dependencies
+ */
+function detectDependenciesFromCode(codeExamples: CodeExample[]): string[] {
+  const dependencies = new Set<string>();
+  
+  // Regular expressions for detecting imports and requires
+  const importRegex = /import\s+(?:(?:\{[^}]*\}|\*\s+as\s+\w+|\w+)\s+from\s+)?['"]([^'"]+)['"]/g;
+  const requireRegex = /(?:const|let|var)\s+(?:\{[^}]*\}|\w+)\s+=\s+require\(['"]([^'"]+)['"]\)/g;
+  
+  for (const example of codeExamples) {
+    if (example.language === 'javascript' || example.language === 'typescript' || example.language === 'jsx' || example.language === 'tsx') {
+      const code = example.code;
+      
+      // Find import statements
+      let match;
+      while ((match = importRegex.exec(code)) !== null) {
+        const packageName = extractPackageName(match[1]);
+        if (packageName) {
+          dependencies.add(packageName);
+        }
+      }
+      
+      // Find require statements
+      while ((match = requireRegex.exec(code)) !== null) {
+        const packageName = extractPackageName(match[1]);
+        if (packageName) {
+          dependencies.add(packageName);
+        }
+      }
+    }
+  }
+  
+  return Array.from(dependencies);
+}
+
+/**
+ * Extracts the package name from an import path
+ * @param importPath The import path
+ * @returns The package name
+ */
+function extractPackageName(importPath: string): string | null {
+  // If the import path starts with . or /, it's a local import
+  if (importPath.startsWith('.') || importPath.startsWith('/')) {
+    return null;
+  }
+  
+  // If the import path includes /, extract the package name (e.g., @org/package or package/subpackage)
+  if (importPath.includes('/')) {
+    // Handle scoped packages (e.g., @org/package)
+    if (importPath.startsWith('@')) {
+      return importPath.split('/').slice(0, 2).join('/');
+    }
+    
+    // Handle regular packages with subpaths (e.g., package/subpackage)
+    return importPath.split('/')[0];
+  }
+  
+  // Otherwise, the import path is the package name
+  return importPath;
+}
+
+/**
  * Analyzes a tool's URL to extract information about the tool
  * @param url The URL of the tool to analyze
  * @param config Stagehand configuration options
@@ -301,10 +447,82 @@ export async function analyzeToolUrl(url: string, config: StagehandConfig = {}):
       'Analyze the page structure and identify main UI components, navigation elements, and interactive features'
     );
     
+    // Try to extract HTML content for code example analysis
+    let codeExamples: CodeExample[] = [];
+    let dependencies: string[] = [];
+    
+    try {
+      const htmlContent = await automation.evaluate(() => document.documentElement.outerHTML);
+      if (typeof htmlContent === 'string') {
+        codeExamples = extractCodeExamplesFromHtml(htmlContent);
+        dependencies = detectDependenciesFromCode(codeExamples);
+      }
+    } catch (error) {
+      console.log(chalk.yellow('Could not extract code examples from page:'), error);
+    }
+    
+    // Look for documentation links
+    let docLinks: any[] = [];
+    if (pageStructure.links && Array.isArray(pageStructure.links)) {
+      docLinks = (pageStructure.links as any[]).filter(link => {
+        const text = String(link.text || '').toLowerCase();
+        const href = String(link.href || '');
+        
+        return (
+          text.includes('doc') || 
+          text.includes('guide') || 
+          text.includes('start') || 
+          text.includes('quick') ||
+          text.includes('install') ||
+          text.includes('api') ||
+          href.includes('docs') ||
+          href.includes('guide') ||
+          href.includes('getting-started') ||
+          href.includes('quick-start') ||
+          href.includes('install') ||
+          href.includes('api')
+        );
+      });
+    }
+    
+    // Follow the most promising link (prioritize quick start and getting started)
+    for (const link of docLinks) {
+      const text = String(link.text || '').toLowerCase();
+      const href = String(link.href || '');
+      
+      if (text.includes('quick start') || text.includes('getting started')) {
+        console.log(chalk.blue(`Following "${link.text}" link to ${href}...`));
+        
+        try {
+          await automation.navigateTo(href);
+          
+          // Extract code examples from this page too
+          try {
+            const htmlContent = await automation.evaluate(() => document.documentElement.outerHTML);
+            if (typeof htmlContent === 'string') {
+              const newExamples = extractCodeExamplesFromHtml(htmlContent);
+              codeExamples = [...codeExamples, ...newExamples];
+              
+              // Update dependencies
+              dependencies = [...new Set([...dependencies, ...detectDependenciesFromCode(newExamples)])];
+            }
+          } catch (innerError) {
+            console.log(chalk.yellow('Could not extract code examples from documentation page:'), innerError);
+          }
+          
+          break; // Only follow one link for now
+        } catch (error) {
+          console.error(chalk.yellow(`Error following link to ${href}:`), error);
+        }
+      }
+    }
+    
     return {
       url,
       toolInfo,
       pageStructure,
+      codeExamples,
+      dependencies,
       timestamp: new Date().toISOString(),
     };
   } catch (error) {
